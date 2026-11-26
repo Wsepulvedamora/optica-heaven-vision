@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscar Receta - Heaven Vision</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    
+    <style>
+        /* VARIABLES DE COLOR GLOBAL */
+        :root {
+            --primary-dark: #1b4b52;
+            --primary-light: #2d7a85;
+            --accent: #d4af37;
+            --bg-body: #f4f7f6;
+            --bg-content: #f8f9fa;
+            --white: #ffffff;
+            --sidebar-width: 260px;
+            --sidebar-collapsed: 80px;
+            --border-color: #cccccc;
+            --text-main: #2c3e50;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-body); display: flex; min-height: 100vh; overflow-x: hidden; color: var(--text-main); }
+
+        /* --- LAYOUT DEL PANEL (SIDEBAR Y TOPBAR) --- */
+        .sidebar { width: var(--sidebar-width); background: linear-gradient(180deg, var(--primary-dark) 0%, #0f2a2e 100%); color: white; transition: all 0.3s ease; display: flex; flex-direction: column; z-index: 100; }
+        .sidebar.collapsed { width: var(--sidebar-collapsed); }
+        .sidebar-header { padding: 20px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); height: 80px; overflow: hidden; }
+        .sidebar-header img { width: 45px; height: 45px; border-radius: 50%; background: white; padding: 2px; flex-shrink: 0; }
+        .sidebar-header span { font-weight: bold; font-size: 1.1rem; white-space: nowrap; transition: opacity 0.3s; }
+        .sidebar.collapsed .sidebar-header span { opacity: 0; pointer-events: none; }
+        
+        .nav-links { list-style: none; padding: 20px 0; flex-grow: 1; }
+        .nav-links a { color: rgba(255,255,255,0.7); text-decoration: none; display: flex; align-items: center; padding: 15px 25px; gap: 18px; transition: all 0.3s; white-space: nowrap; }
+        .nav-links a i { font-size: 1.2rem; width: 25px; text-align: center; }
+        .nav-links a:hover { color: white; background: rgba(255,255,255,0.1); }
+        .nav-links a.active { color: white; background: rgba(255,255,255,0.15); border-left: 4px solid var(--primary-light); }
+        .sidebar.collapsed .nav-links span { display: none; }
+        .logout-link { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); }
+        .logout-link a { color: #ff8e8e !important; }
+
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; transition: all 0.3s ease; background-color: var(--bg-content); }
+        .top-bar { height: 80px; background: var(--white); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .toggle-btn { font-size: 1.5rem; cursor: pointer; color: var(--primary-dark); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info .user-name { font-weight: 600; font-size: 0.95rem; }
+        .user-info .user-avatar { width: 40px; height: 40px; background: var(--primary-dark); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        
+        .content-area { padding: 40px; max-width: 1100px; margin: 0 auto; width: 100%; }
+
+        .search-card { background: var(--white); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 25px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
+        .search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: #555; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #cccccc; border-radius: 6px; font-size: 0.95rem; outline: none; }
+        .form-control:focus { border-color: var(--primary-light); }
+
+        .results-card { background: var(--white); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 25px; border: 1px solid #e2e8f0; }
+        .table-wrapper { overflow-x: auto; margin-top: 15px; }
+        .results-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .results-table th { background-color: #f1f5f6; color: var(--primary-dark); padding: 12px 15px; font-weight: bold; font-size: 0.9rem; border-bottom: 2px solid #ddd; }
+        .results-table td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; font-size: 0.95rem; }
+        .results-table tr:hover { background-color: #f8fafc; }
+
+        .btn { padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; transition: 0.2s; }
+        .btn-primary { background-color: var(--primary-dark); color: white; }
+        .btn-primary:hover { background-color: var(--primary-light); }
+        .btn-action { padding: 6px 12px; font-size: 0.85rem; background-color: var(--primary-light); color: white; }
+        .btn-action:hover { background-color: var(--primary-dark); }
+        .btn-danger { padding: 6px 12px; font-size: 0.85rem; background-color: #dc2626; color: white; }
+        .btn-danger:hover { background-color: #b91c1c; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background-color: white; border-radius: 12px; max-width: 800px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 30px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); position: relative; }
+        .close-modal { position: absolute; top: 20px; right: 25px; font-size: 1.5rem; cursor: pointer; color: #666; }
+
+        .print-template { display: none; }
+
+        @media print {
+            body { background: #ffffff !important; padding: 15mm !important; }
+            .sidebar, .top-bar, .content-area, .modal { display: none !important; }
+            .print-template { display: block !important; width: 100% !important; }
+            .print-header { display: flex !important; justify-content: space-between; align-items: center; border-bottom: 3px solid #1b4b52; padding-bottom: 15px; margin-bottom: 30px; }
+            .print-header-right { text-align: right; }
+            .print-header-right h2 { color: #1b4b52 !important; font-size: 18pt; font-weight: bold; }
+            .print-box { border: 2px solid #1b4b52 !important; border-radius: 8px !important; margin-bottom: 20px !important; overflow: hidden; }
+            .print-title-bar { background-color: #1b4b52 !important; color: white !important; padding: 8px 15px !important; font-size: 10pt !important; font-weight: bold; text-transform: uppercase; }
+            .print-row { display: flex; border-bottom: 1px solid #ddd; }
+            .print-row:last-child { border-bottom: none; }
+            .print-group { padding: 8px 15px; flex: 1; border-right: 1px solid #ddd; font-size: 10pt; }
+            .print-group:last-child { border-right: none; }
+            .print-group strong { color: #1b4b52; font-size: 8pt; text-transform: uppercase; display: block; margin-bottom: 3px; }
+            .print-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 10pt; }
+            .print-table th { background-color: rgba(27, 75, 82, 0.1) !important; color: #1b4b52 !important; padding: 8px; border: 1px solid #ddd; }
+            .print-table td { padding: 8px; border: 1px solid #ddd; font-weight: bold; }
+            .print-footer { display: flex !important; justify-content: space-between; margin-top: 80px; }
+            .sig-block { text-align: center; width: 35%; border-top: 2px solid #1b4b52; padding-top: 8px; font-size: 10pt; font-weight: bold; color: #1b4b52; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <img src="logo-circular.jpg" alt="HV" onerror="this.src='https://via.placeholder.com/45?text=HV'">
+            <span>Heaven Vision</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="dashboard.html"><i class="fa-solid fa-chart-line"></i><span>Inicio / Dashboard</span></a></li>
+            <li><a href="crear_receta.html"><i class="fa-solid fa-file-prescription"></i><span>Crear Receta</span></a></li>
+            <li><a href="ordenes.html"><i class="fa-solid fa-file-invoice"></i><span>Orden de Trabajo</span></a></li>
+            <li><a href="buscar_receta.html" class="active"><i class="fa-solid fa-magnifying-glass"></i><span>Buscar Receta</span></a></li>
+            <li><a href="buscar_orden.html"><i class="fa-solid fa-search-dollar"></i><span>Buscar Orden</span></a></li>
+            <li><a href="inventario.html"><i class="fa-solid fa-boxes-stacked"></i><span>Inventario</span></a></li>
+            <li><a href="inventario_cristales.html"><i class="fa-solid fa-microscope"></i><span>Inv. Cristales</span></a></li>
+            <li class="logout-link"><a href="#" onclick="cerrarSesion()"><i class="fa-solid fa-power-off"></i><span>Cerrar Sesión</span></a></li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <header class="top-bar">
+            <div class="toggle-btn" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></div>
+            <div class="user-info">
+                <span class="user-name">Administrador</span>
+                <div class="user-avatar">AD</div>
+            </div>
+        </header>
+
+        <main class="content-area">
+            <div style="margin-bottom: 25px;">
+                <h1 style="color: var(--primary-dark);">Historial de Recetas</h1>
+                <p style="color: #666;">Filtre o busque los registros médicos guardados en el sistema.</p>
+            </div>
+
+            <div class="search-card">
+                <form id="searchForm" onsubmit="buscarRecetas(event)">
+                    <div class="search-grid">
+                        <div class="form-group">
+                            <label>N° Receta</label>
+                            <input type="number" id="s_id" class="form-control" placeholder="Ej. 14">
+                        </div>
+                        <div class="form-group">
+                            <label>RUT Paciente</label>
+                            <input type="text" id="s_rut" class="form-control" placeholder="Ej. 21.000.220-1">
+                        </div>
+                        <div class="form-group">
+                            <label>Nombre Paciente</label>
+                            <input type="text" id="s_nombre" class="form-control" placeholder="Ej. Gohan">
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                <i class="fa-solid fa-search"></i> Buscar Registros
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="results-card">
+                <h3 style="color: var(--primary-dark);">Resultados Coincidentes</h3>
+                <div class="table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>N° Receta</th>
+                                <th>Fecha</th>
+                                <th>RUT</th>
+                                <th>Paciente</th>
+                                <th>Diagnóstico / Notas</th>
+                                <th style="text-align: center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <tr><td colspan="6" style="text-align: center; color: #888; padding: 20px;">Cargando los últimos registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="viewModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h2 style="color: var(--primary-dark); margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                <i class="fa-solid fa-file-medical"></i> Ficha de Receta Oftálmica
+            </h2>
+            <div id="modalDataContainer"></div>
+            <div style="display: flex; justify-content: flex-end; gap: 15px; margin-top: 25px; border-top: 1px solid #eee; padding-top: 15px;">
+                <button class="btn btn-secondary" onclick="closeModal()">Cerrar Vista</button>
+                <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Imprimir Documento</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editRecetaModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeEditModal()">&times;</span>
+            <h2 style="color: var(--primary-dark); margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                <i class="fa-solid fa-pen-to-square"></i> Modificar Receta N° <span id="m_edit_receta_title">0000</span>
+            </h2>
+            
+            <form id="modalEditRecetaForm" onsubmit="actualizarReceta(event)">
+                <input type="hidden" id="m_edit_rec_id">
+                
+                <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+                    <strong>Paciente:</strong> <span id="m_edit_paciente_name" style="color: var(--primary-dark);">N/A</span>
+                </div>
+
+                <h4 style="color: var(--primary-dark); margin-bottom: 10px;">Ojo Derecho (OD)</h4>
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px;">
+                    <div class="form-group"><label>Esférico</label><input type="text" id="m_e_od_esfe" class="form-control"></div>
+                    <div class="form-group"><label>Cilindro</label><input type="text" id="m_e_od_cili" class="form-control"></div>
+                    <div class="form-group"><label>Eje</label><input type="text" id="m_e_od_eje" class="form-control"></div>
+                    <div class="form-group"><label>AV</label><input type="text" id="m_e_od_av" class="form-control"></div>
+                    <div class="form-group"><label>DP Cerca</label><input type="text" id="m_e_dp_cerca" class="form-control"></div>
+                </div>
+
+                <h4 style="color: var(--primary-dark); margin-bottom: 10px;">Ojo Izquierdo (OI)</h4>
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px;">
+                    <div class="form-group"><label>Esférico</label><input type="text" id="m_e_oi_esfe" class="form-control"></div>
+                    <div class="form-group"><label>Cilindro</label><input type="text" id="m_e_oi_cili" class="form-control"></div>
+                    <div class="form-group"><label>Eje</label><input type="text" id="m_e_oi_eje" class="form-control"></div>
+                    <div class="form-group"><label>AV</label><input type="text" id="m_e_oi_av" class="form-control"></div>
+                    <div class="form-group"><label>DP Lejos</label><input type="text" id="m_e_dp_lejos" class="form-control"></div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Adición General (ADD)</label>
+                    <input type="text" id="m_e_add" class="form-control">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label>Diagnósticos Adicionales</label>
+                    <textarea id="m_e_diag" class="form-control" rows="2"></textarea>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label>Observaciones</label>
+                    <textarea id="m_e_obs" class="form-control" rows="3"></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnGuardarEdicionReceta"><i class="fa-solid fa-save"></i> Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="printTemplate" class="print-template">
+        <div class="print-header">
+            <div><img src="Logo_Heaven_Vision.png" alt="Heaven Vision" style="max-width: 220px;" onerror="this.src='logo-grande.png'"></div>
+            <div class="print-header-right">
+                <h3 style="font-size: 12pt; font-weight: bold; color: #1b4b52;">N° Receta: <span id="p_id_top">0000</span></h3>
+                <h2>RECETA OFTALMOLÓGICA</h2>
+                <p>Fono: +56 976668943</p>
+                <p>Av. 4 norte 676, Talca, Chile</p>
+            </div>
+        </div>
+
+        <div class="print-box">
+            <div class="print-title-bar">Datos del Paciente</div>
+            <div class="print-row">
+                <div class="print-group" style="flex: 2;"><strong>Paciente</strong><span id="p_nom"></span></div>
+                <div class="print-group"><strong>RUT</strong><span id="p_ru"></span></div>
+            </div>
+            <div class="print-row">
+                <div class="print-group"><strong>Edad</strong><span id="p_ed"></span></div>
+                <div class="print-group"><strong>Teléfono</strong><span id="p_tel"></span></div>
+                <div class="print-group" style="flex: 2;"><strong>Correo Electrónico</strong><span id="p_cor"></span></div>
+            </div>
+        </div>
+
+        <div class="print-box">
+            <div class="print-title-bar">Fórmula / Prescripción Óptica</div>
+            <table class="print-table">
+                <thead>
+                    <tr>
+                        <th>OJO</th>
+                        <th>ESFÉRICO</th>
+                        <th>CILINDRO</th>
+                        <th>EJE</th>
+                        <th>AV</th>
+                        <th>ADD</th>
+                        <th>DP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="background-color: rgba(27,75,82,0.05);">OD</td>
+                        <td id="p_od_esfe"></td><td id="p_od_cili"></td><td id="p_od_eje"></td><td id="p_od_av"></td>
+                        <td rowspan="2" style="vertical-align: middle;" id="p_add"></td>
+                        <td id="p_od_dp"></td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: rgba(27,75,82,0.05);">OI</td>
+                        <td id="p_oi_esfe"></td><td id="p_oi_cili"></td><td id="p_oi_eje"></td><td id="p_oi_av"></td>
+                        <td id="p_oi_dp"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="print-box">
+            <div class="print-title-bar">Diagnósticos Adicionales</div>
+            <div class="print-row"><div class="print-group" id="p_diag" style="min-height: 45px; font-weight: bold;"></div></div>
+        </div>
+
+        <div class="print-box">
+            <div class="print-title-bar">Observaciones</div>
+            <div class="print-row"><div class="print-group" id="p_obs" style="min-height: 45px; font-weight: bold; white-space: pre-line;"></div></div>
+        </div>
+
+        <div class="print-footer">
+            <div class="sig-block">Firma y Timbre Profesional</div>
+            <div class="sig-block">Fecha de Emisión: <span id="p_fecha"></span></div>
+        </div>
+    </div>
+
+    <script>
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+        function closeModal() { document.getElementById('viewModal').style.display = "none"; }
+        function closeEditModal() { document.getElementById('editRecetaModal').style.display = "none"; }
+
+        let recetaSeleccionadaGlobal = null;
+        document.addEventListener('DOMContentLoaded', () => { buscarRecetas(null); });
+
+        async function buscarRecetas(e) {
+            if(e) e.preventDefault();
+            const idInput = document.getElementById('s_id').value.trim();
+            const rutInput = document.getElementById('s_rut').value.trim();
+            const nombreInput = document.getElementById('s_nombre').value.trim();
+            const tbody = document.getElementById('resultsBody');
+            
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #666; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Cargando información...</td></tr>`;
+
+            try {
+                let recetas = [];
+                if (idInput) {
+                    const { data, error } = await supabaseClient.from('Prescripciones').select('*, Cliente(*)').eq('id', parseInt(idInput));
+                    if (error) throw error;
+                    recetas = data || [];
+                } else if (rutInput || nombreInput) {
+                    let queryClientes = supabaseClient.from('Cliente').select('id');
+                    if (rutInput) queryClientes = queryClientes.ilike('patient_rut', `%${rutInput}%`);
+                    if (nombreInput) queryClientes = queryClientes.ilike('patient_name', `%${nombreInput}%`);
+                    const { data: clientes, error: errCli } = await queryClientes;
+                    if (errCli) throw errCli;
+
+                    if (clientes && clientes.length > 0) {
+                        const idsClientes = clientes.map(c => c.id);
+                        const { data: dataPresc, error: errPresc } = await supabaseClient.from('Prescripciones').select('*, Cliente(*)').in('patient_id', idsClientes).order('id', { ascending: false });
+                        if (errPresc) throw errPresc;
+                        recetas = dataPresc || [];
+                    }
+                } else {
+                    const { data, error } = await supabaseClient.from('Prescripciones').select('*, Cliente(*)').order('id', { ascending: false }).limit(10);
+                    if (error) throw error;
+                    recetas = data || [];
+                }
+
+                if (recetas.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #dc2626; padding: 20px; font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> No se encontraron recetas ópticas.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = "";
+                recetas.forEach(rec => {
+                    const idFormateado = String(rec.id).padStart(4, '0');
+                    const nombrePaciente = rec.Cliente ? rec.Cliente.patient_name : "No asignado";
+                    const rutPaciente = rec.Cliente ? rec.Cliente.patient_rut : "N/A";
+                    
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="font-weight: bold; color: var(--primary-dark);">#${idFormateado}</td>
+                        <td>${rec.date || 'Sin fecha'}</td>
+                        <td style="font-weight: 500;">${rutPaciente}</td>
+                        <td>${nombrePaciente}</td>
+                        <td style="color: #666; font-size: 0.85rem; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${rec.texto1 || 'Sin notas'}</td>
+                        <td style="text-align: center; display: flex; gap: 8px; justify-content: center;">
+                            <button class="btn btn-action" onclick="verDetallesReceta(${JSON.stringify(rec).replace(/"/g, '&quot;')})"><i class="fa-solid fa-eye"></i> Ver</button>
+                            <button class="btn btn-action" style="background-color: var(--accent); color: white;" onclick="abrirModalEdicionReceta(${JSON.stringify(rec).replace(/"/g, '&quot;')})"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                            <button class="btn btn-danger" onclick="eliminarReceta(${rec.id})"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #dc2626; padding: 20px;">Error técnico: ${err.message}</td></tr>`;
+            }
+        }
+
+        async function eliminarReceta(id) {
+            const confirmacion = confirm(`⚠️ ALERTA DE SEGURIDAD HEAVEN VISION ⚠️\n\n¿Está seguro de eliminar la Receta #${String(id).padStart(4, '0')}?\n\nEsta acción borrará el registro de forma permanente.`);
+            if (!confirmacion) return;
+
+            try {
+                const { error } = await supabaseClient.from('Prescripciones').delete().eq('id', id);
+                if (error) {
+                    if (error.message.includes("violates foreign key constraint")) {
+                        alert("No se puede eliminar la receta porque tiene una Orden de Trabajo vinculada comercialmente. Elimine primero la orden.");
+                    } else { throw error; }
+                    return;
+                }
+                alert("Receta eliminada correctamente.");
+                buscarRecetas(null);
+            } catch (err) { alert("Error: " + err.message); }
+        }
+
+        function verDetallesReceta(receta) {
+            recetaSeleccionadaGlobal = receta;
+            const idFormateado = String(receta.id).padStart(4, '0');
+            document.getElementById('p_id_top').innerText = idFormateado;
+            document.getElementById('p_nom').innerText = receta.Cliente ? receta.Cliente.patient_name : '';
+            document.getElementById('p_ru').innerText = receta.Cliente ? receta.Cliente.patient_rut : '';
+            document.getElementById('p_ed').innerText = receta.Cliente && receta.Cliente.age ? receta.Cliente.age + ' años' : 'N/A';
+            document.getElementById('p_tel').innerText = receta.Cliente ? receta.Cliente.patient_phone : '';
+            document.getElementById('p_cor').innerText = receta.Cliente ? receta.Cliente.patient_email : '';
+
+            document.getElementById('p_od_esfe').innerText = receta.od_esfe; document.getElementById('p_od_cili').innerText = receta.od_cili;
+            document.getElementById('p_od_eje').innerText = receta.od_eje; document.getElementById('p_od_av').innerText = receta.od_av;
+            document.getElementById('p_od_dp').innerText = receta.dp_cerca ? receta.dp_cerca + ' mm' : '0';
+            document.getElementById('p_oi_esfe').innerText = receta.oi_esfe; document.getElementById('p_oi_cili').innerText = receta.oi_cili;
+            document.getElementById('p_oi_eje').innerText = receta.oi_eje; document.getElementById('p_oi_av').innerText = receta.oi_av;
+            document.getElementById('p_oi_dp').innerText = receta.dp_lejos ? receta.dp_lejos + ' mm' : '0';
+            document.getElementById('p_add').innerText = receta.add_val ? receta.add_val : '0.00';
+            document.getElementById('p_diag').innerText = receta.texto1 || 'Sin diagnósticos adicionales.';
+            document.getElementById('p_obs').innerText = receta.texto2 || 'Sin observaciones médicas registradas.';
+            
+            if (receta.date) {
+                const partes = receta.date.split('-');
+                document.getElementById('p_fecha').innerText = `${partes[2]}-${partes[1]}-${partes[0]}`;
+            } else { document.getElementById('p_fecha').innerText = 'N/A'; }
+
+            document.getElementById('modalDataContainer').innerHTML = `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background-color: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+                    <div><strong>Paciente:</strong> ${receta.Cliente ? receta.Cliente.patient_name : 'N/A'}</div>
+                    <div><strong>RUT:</strong> ${receta.Cliente ? receta.Cliente.patient_rut : 'N/A'}</div>
+                    <div><strong>Edad:</strong> ${receta.Cliente && receta.Cliente.age ? receta.Cliente.age : 'N/A'}</div>
+                    <div><strong>Teléfono:</strong> ${receta.Cliente ? receta.Cliente.patient_phone : 'N/A'}</div>
+                </div>
+                <h4 style="color: var(--primary-dark); margin-bottom: 10px;">Valores Clínicos Guardados:</h4>
+                <table style="width:100%; border-collapse:collapse; text-align:center; font-size:0.9rem; margin-bottom:20px;">
+                    <thead>
+                        <tr style="background-color: #f1f5f6;">
+                            <th style="border:1px solid #ddd; padding:8px;">OJO</th>
+                            <th style="border:1px solid #ddd; padding:8px;">ESFÉ</th>
+                            <th style="border:1px solid #ddd; padding:8px;">CILI</th>
+                            <th style="border:1px solid #ddd; padding:8px;">EJE</th>
+                            <th style="border:1px solid #ddd; padding:8px;">AV</th>
+                            <th style="border:1px solid #ddd; padding:8px;">DP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="border:1px solid #ddd; padding:8px; font-weight:bold; background-color:#fafafa;">OD</td>
+                            <td>${receta.od_esfe}</td><td>${receta.od_cili}</td><td>${receta.od_eje}</td><td>${receta.od_av}</td><td>${receta.dp_cerca} mm</td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #ddd; padding:8px; font-weight:bold; background-color:#fafafa;">OI</td>
+                            <td>${receta.oi_esfe}</td><td>${receta.oi_cili}</td><td>${receta.oi_eje}</td><td>${receta.oi_av}</td><td>${receta.dp_lejos} mm</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div>
+                    <strong>Adición General:</strong> ${receta.add_val ? receta.add_val : '0.00'}<br><br>
+                    <strong>Diagnósticos Adicionales:</strong><p style="background:#f1f5f6; padding:10px; border-radius:4px; margin-top:5px;">${receta.texto1 || 'Ninguno'}</p><br>
+                    <strong>Observaciones:</strong><p style="background:#f1f5f6; padding:10px; border-radius:4px; margin-top:5px; white-space:pre-line;">${receta.texto2 || 'Ninguna'}</p>
+                </div>
+            `;
+            document.getElementById('viewModal').style.display = "flex";
+        }
+
+        // Función que abre el modal de EDICIÓN y carga los datos actuales
+        function abrirModalEdicionReceta(receta) {
+            document.getElementById('m_edit_rec_id').value = receta.id;
+            document.getElementById('m_edit_receta_title').innerText = String(receta.id).padStart(4, '0');
+            document.getElementById('m_edit_paciente_name').innerText = receta.Cliente ? receta.Cliente.patient_name : 'N/A';
+            
+            document.getElementById('m_e_od_esfe').value = receta.od_esfe || '';
+            document.getElementById('m_e_od_cili').value = receta.od_cili || '';
+            document.getElementById('m_e_od_eje').value = receta.od_eje || '';
+            document.getElementById('m_e_od_av').value = receta.od_av || '';
+            document.getElementById('m_e_dp_cerca').value = receta.dp_cerca || '';
+            
+            document.getElementById('m_e_oi_esfe').value = receta.oi_esfe || '';
+            document.getElementById('m_e_oi_cili').value = receta.oi_cili || '';
+            document.getElementById('m_e_oi_eje').value = receta.oi_eje || '';
+            document.getElementById('m_e_oi_av').value = receta.oi_av || '';
+            document.getElementById('m_e_dp_lejos').value = receta.dp_lejos || '';
+            
+            document.getElementById('m_e_add').value = receta.add_val || '';
+            document.getElementById('m_e_diag').value = receta.texto1 || '';
+            document.getElementById('m_e_obs').value = receta.texto2 || '';
+            
+            document.getElementById('editRecetaModal').style.display = "flex";
+        }
+
+        // Función que envía los cambios a Supabase
+        // Función que envía los cambios a Supabase (Corregida para campos numéricos vacíos)
+        // Función que envía los cambios a Supabase (Solución a NOT NULL y Double Precision)
+        async function actualizarReceta(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnGuardarEdicionReceta');
+            btn.disabled = true;
+            btn.innerText = "Guardando...";
+
+            const rowId = parseInt(document.getElementById('m_edit_rec_id').value);
+
+            // Filtro: Si la casilla está vacía, envía un 0 en lugar de null o ""
+            const valOrZero = (id) => {
+                const val = document.getElementById(id).value.trim();
+                return val === '' ? 0 : val;
+            };
+
+            // Recolectamos los datos pasando por el filtro de ceros
+            const updates = {
+                od_esfe: valOrZero('m_e_od_esfe'),
+                od_cili: valOrZero('m_e_od_cili'),
+                od_eje: valOrZero('m_e_od_eje'),
+                od_av: valOrZero('m_e_od_av'),
+                dp_cerca: valOrZero('m_e_dp_cerca'),
+                
+                oi_esfe: valOrZero('m_e_oi_esfe'),
+                oi_cili: valOrZero('m_e_oi_cili'),
+                oi_eje: valOrZero('m_e_oi_eje'),
+                oi_av: valOrZero('m_e_oi_av'),
+                dp_lejos: valOrZero('m_e_dp_lejos'),
+                
+                add_val: valOrZero('m_e_add'),
+                // Los campos de texto sí aceptan strings vacíos sin problema
+                texto1: document.getElementById('m_e_diag').value,
+                texto2: document.getElementById('m_e_obs').value
+            };
+
+            try {
+                const { error } = await supabaseClient.from('Prescripciones').update(updates).eq('id', rowId);
+                if (error) throw error;
+                closeEditModal();
+                alert("Receta oftálmi actualizada de forma exitosa.");
+                buscarRecetas(null); // Refrescar la tabla
+            } catch (err) {
+                alert("Error al actualizar la base de datos: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-save"></i> Guardar Cambios`;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventario - Heaven Vision</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    
+    <style>
+        /* VARIABLES DE COLOR GLOBAL HEAVEN VISION */
+        :root {
+            --primary-dark: #1b4b52;
+            --primary-light: #2d7a85;
+            --accent: #d4af37;
+            --bg-body: #f4f7f6;
+            --bg-content: #f8f9fa;
+            --white: #ffffff;
+            --sidebar-width: 260px;
+            --sidebar-collapsed: 80px;
+            --border-color: #cccccc;
+            --text-dark: #2c3e50;
+            --text-muted: #64748b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+            color: var(--text-dark);
+        }
+
+        /* --- LAYOUT DEL PANEL (SIDEBAR Y TOPBAR) --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, var(--primary-dark) 0%, #0f2a2e 100%);
+            color: white;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+        }
+
+        .sidebar.collapsed { width: var(--sidebar-collapsed); }
+        .sidebar-header { padding: 20px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); height: 80px; overflow: hidden; }
+        .sidebar-header img { width: 45px; height: 45px; border-radius: 50%; background: white; padding: 2px; flex-shrink: 0; }
+        .sidebar-header span { font-weight: bold; font-size: 1.1rem; white-space: nowrap; transition: opacity 0.3s; }
+        .sidebar.collapsed .sidebar-header span { opacity: 0; pointer-events: none; }
+        
+        .nav-links { list-style: none; padding: 20px 0; flex-grow: 1; }
+        .nav-links a { color: rgba(255,255,255,0.7); text-decoration: none; display: flex; align-items: center; padding: 15px 25px; gap: 18px; transition: all 0.3s; white-space: nowrap; }
+        .nav-links a i { font-size: 1.2rem; width: 25px; text-align: center; }
+        .nav-links a:hover { color: white; background: rgba(255,255,255,0.1); }
+        .nav-links a.active { color: white; background: rgba(255,255,255,0.15); border-left: 4px solid var(--primary-light); }
+        .sidebar.collapsed .nav-links span { display: none; }
+        .logout-link { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); }
+        .logout-link a { color: #ff8e8e !important; }
+
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; transition: all 0.3s ease; background-color: var(--bg-content); }
+        .top-bar { height: 80px; background: var(--white); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .toggle-btn { font-size: 1.5rem; cursor: pointer; color: var(--primary-dark); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info .user-name { font-weight: 600; font-size: 0.95rem; }
+        .user-info .user-avatar { width: 40px; height: 40px; background: var(--primary-dark); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        
+        .content-area { padding: 40px; max-width: 1100px; margin: 0 auto; width: 100%; }
+
+        /* --- REJILLA DE CARDS DE INVENTARIO RÁPIDO --- */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: var(--white); padding: 20px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.03); border-left: 4px solid var(--primary-dark); }
+        .stat-card.critical { border-left-color: #d97706; }
+        .stat-card.out { border-left-color: #dc2626; }
+        .stat-card h3 { font-size: 1.8rem; color: var(--text-dark); margin-bottom: 2px; }
+        .stat-card p { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+        .stat-card i { font-size: 2rem; opacity: 0.25; color: var(--primary-dark); }
+
+        /* --- ACCIONES INTERACTIVAS --- */
+        .action-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px; }
+        .search-box { position: relative; max-width: 400px; width: 100%; }
+        .search-box input { width: 100%; padding: 12px 15px 12px 40px; border: 1px solid #cbd5e1; border-radius: 8px; outline: none; font-size: 0.95rem; }
+        .search-box i { position: absolute; left: 15px; top: 15px; color: #94a3b8; }
+
+        /* --- TABLA DE INVENTARIO --- */
+        .results-card { background: var(--white); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 25px; border: 1px solid #e2e8f0; }
+        .table-wrapper { overflow-x: auto; margin-top: 15px; }
+        .results-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .results-table th { background-color: #f1f5f6; color: var(--primary-dark); padding: 12px 15px; font-weight: bold; font-size: 0.9rem; border-bottom: 2px solid #ddd; }
+        .results-table td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; font-size: 0.95rem; }
+        .results-table tr:hover { background-color: #f8fafc; }
+
+        /* Badges de Stock */
+        .stock-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+        .stock-normal { background-color: #d1fae5; color: #059669; }
+        .stock-critical { background-color: #fef3c7; color: #d97706; }
+        .stock-out { background-color: #fef2f2; color: #dc2626; }
+
+        /* Botones */
+        .btn { padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 8px; font-size: 0.95rem; transition: 0.2s; }
+        .btn-primary { background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-light) 100%); color: white; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(27, 75, 82, 0.2); }
+        .btn-action { padding: 6px 12px; font-size: 0.85rem; background-color: var(--primary-light); color: white; }
+        .btn-action:hover { background-color: var(--primary-dark); }
+        .btn-danger { padding: 6px 10px; font-size: 0.85rem; background-color: #dc2626; color: white; }
+        .btn-danger:hover { background-color: #b91c1c; }
+
+        /* --- MODAL --- */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background-color: white; border-radius: 12px; max-width: 550px; width: 100%; padding: 35px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); position: relative; }
+        .close-modal { position: absolute; top: 20px; right: 25px; font-size: 1.5rem; cursor: pointer; color: #666; }
+        
+        .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: #555; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #cccccc; border-radius: 6px; font-size: 0.95rem; outline: none; }
+        .form-control:focus { border-color: var(--primary-light); }
+    </style>
+</head>
+<body>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <img src="logo-circular.jpg" alt="HV" onerror="this.src='https://via.placeholder.com/45?text=HV'">
+            <span>Heaven Vision</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="dashboard.html"><i class="fa-solid fa-chart-line"></i><span>Inicio / Dashboard</span></a></li>
+            <li><a href="crear_receta.html"><i class="fa-solid fa-file-prescription"></i><span>Crear Receta</span></a></li>
+            <li><a href="ordenes.html"><i class="fa-solid fa-file-invoice"></i><span>Orden de Trabajo</span></a></li>
+            <li><a href="buscar_receta.html"><i class="fa-solid fa-magnifying-glass"></i><span>Buscar Receta</span></a></li>
+            <li><a href="buscar_orden.html"><i class="fa-solid fa-search-dollar"></i><span>Buscar Orden</span></a></li>
+            <li><a href="inventario.html" class="active"><i class="fa-solid fa-boxes-stacked"></i><span>Inventario</span></a></li>
+            <li><a href="inventario_cristales.html"><i class="fa-solid fa-microscope"></i><span>Inv. Cristales</span></a></li>
+            <li class="logout-link"><a href="#" onclick="cerrarSesion()"><i class="fa-solid fa-power-off"></i><span>Cerrar Sesión</span></a></li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <header class="top-bar">
+            <div class="toggle-btn" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></div>
+            <div class="user-info">
+                <span class="user-name">Administrador</span>
+                <div class="user-avatar">AD</div>
+            </div>
+        </header>
+
+        <main class="content-area">
+            <div style="margin-bottom: 25px;">
+                <h1 style="color: var(--primary-dark);">Control de Inventario</h1>
+                <p style="color: #666;">Administre stock y categorías de armazones, cristales y suministros en tiempo real.</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="info"><h3 id="kpi-total">...</h3><p>Total Productos</p></div>
+                    <i class="fa-solid fa-box"></i>
+                </div>
+                <div class="stat-card critical">
+                    <div class="info"><h3 id="kpi-critico">...</h3><p>Stock Crítico (&lt; 3)</p></div>
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <div class="stat-card out">
+                    <div class="info"><h3 id="kpi-agotado">...</h3><p>Artículos Agotados</p></div>
+                    <i class="fa-solid fa-circle-xmark"></i>
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <div class="search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="txtBuscar" placeholder="Buscar por nombre o categoría..." oninput="cargarInventario()">
+                </div>
+                <button class="btn btn-primary" onclick="abrirModalNuevo()">
+                    <i class="fa-solid fa-plus"></i> Añadir Producto
+                </button>
+            </div>
+
+            <div class="results-card">
+                <div class="table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>Código ID</th>
+                                <th>Nombre del Producto</th>
+                                <th>Categoría</th>
+                                <th>Stock Actual</th>
+                                <th>Estado Stock</th>
+                                <th style="text-align: center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryBody">
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: #888; padding: 20px;">
+                                    <i class="fa-solid fa-spinner fa-spin"></i> Conectando con el almacén de Supabase...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="productModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="cerrarModal()">&times;</span>
+            <h2 id="modalTitle" style="color: var(--primary-dark); margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                Nuevo Producto
+            </h2>
+            
+            <form id="productForm" onsubmit="guardarProducto(event)">
+                <input type="hidden" id="p_id">
+
+                <div class="form-group">
+                    <label>Nombre del Producto / Modelo:</label>
+                    <input type="text" id="p_nombre" class="form-control" placeholder="Ej. Armazón Ray-Ban Aviator Metal" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Categoría (Escriba una nueva o seleccione existente):</label>
+                    <input type="text" id="p_categoria" class="form-control" list="categorias_list" placeholder="Ej. Armazones, Cristales, Accesorios..." required>
+                    <datalist id="categorias_list"></datalist>
+                </div>
+
+                <div class="form-group">
+                    <label>Stock Inicial / Actual (Unidades):</label>
+                    <input type="number" id="p_stock" class="form-control" placeholder="0" min="0" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Descripción / Notas (Opcional):</label>
+                    <textarea id="p_descripcion" class="form-control" placeholder="Color, medidas, procedencia..." style="resize: vertical; min-height: 70px;"></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnGuardar">Guardar Producto</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+        function cerrarModal() { document.getElementById('productModal').style.display = "none"; }
+
+        document.addEventListener('DOMContentLoaded', cargarInventario);
+
+        // ============================================================
+        // MOTOR EN TIEMPO REAL: LEER, FILTRAR Y AUTO-COMPLETAR CATEGORÍAS
+        // ============================================================
+        async function cargarInventario() {
+            const busqueda = document.getElementById('txtBuscar').value.trim();
+            const tbody = document.getElementById('inventoryBody');
+            
+            try {
+                let query = supabaseClient.from('Inventario').select('*');
+                
+                if (busqueda) {
+                    query = query.or(`nombre.ilike.%${busqueda}%,categoria.ilike.%${busqueda}%`);
+                }
+                
+                const { data: productos, error } = await query.order('id', { ascending: false });
+                if (error) throw error;
+
+                // 1. EXTRAER Y MAPEAR CATEGORÍAS ÚNICAS YA CREADAS EN LA DB
+                const categoriasExistentes = [...new Set(productos.map(p => p.categoria).filter(Boolean))];
+                const datalist = document.getElementById('categorias_list');
+                datalist.innerHTML = "";
+                categoriasExistentes.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    datalist.appendChild(option);
+                });
+
+                // 2. CALCULAR CONTADORES KPIS
+                let total = productos.length;
+                let criticos = productos.filter(p => p.stock > 0 && p.stock < 3).length;
+                let agotados = productos.filter(p => p.stock === 0).length;
+
+                document.getElementById('kpi-total').innerText = total;
+                document.getElementById('kpi-critico').innerText = criticos;
+                document.getElementById('kpi-agotado').innerText = agotados;
+
+                // 3. RENDERIZAR FILAS EN LA TABLA (SIN COLUMNA DE PRECIO)
+                if (productos.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #888; padding: 20px;">No hay productos registrados en el inventario con ese criterio.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = "";
+                productos.forEach(prod => {
+                    let badgeClass = "stock-normal";
+                    let badgeText = "Disponible";
+
+                    if (prod.stock === 0) {
+                        badgeClass = "stock-out";
+                        badgeText = "Agotado";
+                    } else if (prod.stock < 3) {
+                        badgeClass = "stock-critical";
+                        badgeText = "Crítico";
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="font-weight: bold; color: var(--primary-dark);">#${String(prod.id).padStart(4, '0')}</td>
+                        <td style="font-weight: 500;">${prod.nombre}</td>
+                        <td>${prod.categoria}</td>
+                        <td style="font-weight: bold;">${prod.stock} u.</td>
+                        <td><span class="stock-badge ${badgeClass}">${badgeText}</span></td>
+                        <td style="text-align: center; display: flex; gap: 8px; justify-content: center;">
+                            <button type="button" class="btn btn-action" onclick="abrirModalEditar(${JSON.stringify(prod).replace(/"/g, '&quot;')})">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                            </button>
+                            <button type="button" class="btn btn-danger" onclick="eliminarProducto(${prod.id}, '${prod.nombre.replace(/'/g, "\\'")}')">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+            } catch (err) {
+                console.error("Error al cargar inventario:", err);
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: #dc2626; padding: 20px;">Fallo al conectar con Supabase: ${err.message}</td></tr>`;
+            }
+        }
+
+        // ==========================================
+        // CONTROL DE VENTANAS MODALES
+        // ==========================================
+        function abrirModalNuevo() {
+            document.getElementById('productForm').reset();
+            document.getElementById('p_id').value = "";
+            document.getElementById('modalTitle').innerText = "Añadir Nuevo Producto";
+            document.getElementById('productModal').style.display = "flex";
+        }
+
+        function abrirModalEditar(prod) {
+            document.getElementById('p_id').value = prod.id;
+            document.getElementById('p_nombre').value = prod.nombre;
+            document.getElementById('p_categoria').value = prod.categoria;
+            document.getElementById('p_stock').value = prod.stock;
+            document.getElementById('p_descripcion').value = prod.descripcion || "";
+            
+            document.getElementById('modalTitle').innerText = `Modificar Producto #${String(prod.id).padStart(4, '0')}`;
+            document.getElementById('productModal').style.display = "flex";
+        }
+
+        // ==========================================
+        // GUARDAR / ACTUALIZAR EN LA DB DE SUPABASE
+        // ==========================================
+        async function guardarProducto(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnGuardar');
+            btn.disabled = true;
+            btn.innerText = "Guardando...";
+
+            const id = document.getElementById('p_id').value;
+            const nombre = document.getElementById('p_nombre').value.trim();
+            const categoria = document.getElementById('p_categoria').value.trim();
+            const stock = parseInt(document.getElementById('p_stock').value) || 0;
+            const descripcion = document.getElementById('p_descripcion').value.trim();
+
+            // Mapeo limpio excluyendo el precio
+            const datosProducto = { nombre, categoria, stock, descripcion };
+
+            try {
+                if (id) {
+                    const { error } = await supabaseClient
+                        .from('Inventario')
+                        .update(datosProducto)
+                        .eq('id', parseInt(id));
+                    if (error) throw error;
+                } else {
+                    const { error } = await supabaseClient
+                        .from('Inventario')
+                        .insert([datosProducto]);
+                    if (error) throw error;
+                }
+
+                cerrarModal();
+                cargarInventario(); 
+
+            } catch (err) {
+                console.error("Error al procesar el producto:", err);
+                alert("Fallo transaccional: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = "Guardar Producto";
+            }
+        }
+
+        // ==========================================
+        // BORRAR REGISTRO CON CONFIRMACIÓN
+        // ==========================================
+        async function eliminarProducto(id, nombre) {
+            const confirmacion = confirm(`⚠️ CONTROL DE INVENTARIO HEAVEN VISION ⚠️\n\n¿Está seguro de que desea eliminar permanentemente de las estanterías el producto:\n"${nombre}" (Código #${String(id).padStart(4, '0')})?\n\nEsta operación borrará el registro de stock por completo.`);
+            if (!confirmacion) return;
+
+            try {
+                const { error } = await supabaseClient
+                    .from('Inventario')
+                    .delete()
+                    .eq('id', id);
+                if (error) throw error;
+
+                cargarInventario();
+            } catch (err) {
+                console.error("Error al borrar producto:", err);
+                alert("No se pudo dar de baja el artículo: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

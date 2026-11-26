@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buscar Orden de Trabajo - Heaven Vision</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    
+    <style>
+        /* VARIABLES DE COLOR GLOBAL */
+        :root {
+            --primary-dark: #1b4b52;
+            --primary-light: #2d7a85;
+            --accent: #d4af37;
+            --bg-body: #f4f7f6;
+            --bg-content: #f8f9fa;
+            --white: #ffffff;
+            --sidebar-width: 260px;
+            --sidebar-collapsed: 80px;
+            --border-color: #cccccc;
+            --text-dark: #2c3e50;
+            --text-muted: #64748b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        body { background-color: var(--bg-body); display: flex; min-height: 100vh; overflow-x: hidden; color: var(--text-dark); }
+
+        /* --- LAYOUT DEL PANEL (SIDEBAR Y TOPBAR) --- */
+        .sidebar { width: var(--sidebar-width); background: linear-gradient(180deg, var(--primary-dark) 0%, #0f2a2e 100%); color: white; transition: all 0.3s ease; display: flex; flex-direction: column; z-index: 100; }
+        .sidebar.collapsed { width: var(--sidebar-collapsed); }
+        .sidebar-header { padding: 20px; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); height: 80px; overflow: hidden; }
+        .sidebar-header img { width: 45px; height: 45px; border-radius: 50%; background: white; padding: 2px; flex-shrink: 0; }
+        .sidebar-header span { font-weight: bold; font-size: 1.1rem; white-space: nowrap; transition: opacity 0.3s; }
+        .sidebar.collapsed .sidebar-header span { opacity: 0; pointer-events: none; }
+        
+        .nav-links { list-style: none; padding: 20px 0; flex-grow: 1; }
+        .nav-links a { color: rgba(255,255,255,0.7); text-decoration: none; display: flex; align-items: center; padding: 15px 25px; gap: 18px; transition: all 0.3s; white-space: nowrap; }
+        .nav-links a i { font-size: 1.2rem; width: 25px; text-align: center; }
+        .nav-links a:hover { color: white; background: rgba(255,255,255,0.1); }
+        .nav-links a.active { color: white; background: rgba(255,255,255,0.15); border-left: 4px solid var(--primary-light); }
+        .sidebar.collapsed .nav-links span { display: none; }
+        .logout-link { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); }
+        .logout-link a { color: #ff8e8e !important; }
+
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; transition: all 0.3s ease; background-color: var(--bg-content); }
+        .top-bar { height: 80px; background: var(--white); display: flex; justify-content: space-between; align-items: center; padding: 0 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .toggle-btn { font-size: 1.5rem; cursor: pointer; color: var(--primary-dark); }
+        .user-info { display: flex; align-items: center; gap: 12px; }
+        .user-info .user-name { font-weight: 600; font-size: 0.95rem; }
+        .user-info .user-avatar { width: 40px; height: 40px; background: var(--primary-dark); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        
+        .content-area { padding: 40px; max-width: 1100px; margin: 0 auto; width: 100%; }
+
+        .search-card { background: var(--white); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 25px; margin-bottom: 30px; border: 1px solid #e2e8f0; }
+        .search-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 0.85rem; font-weight: 600; color: #555; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #cccccc; border-radius: 6px; font-size: 0.95rem; outline: none; }
+        .form-control:focus { border-color: var(--primary-light); }
+
+        .results-card { background: var(--white); border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); padding: 25px; border: 1px solid #e2e8f0; }
+        .table-wrapper { overflow-x: auto; margin-top: 15px; }
+        .results-table { width: 100%; border-collapse: collapse; text-align: left; }
+        .results-table th { background-color: #f1f5f6; color: var(--primary-dark); padding: 12px 15px; font-weight: bold; font-size: 0.9rem; border-bottom: 2px solid #ddd; }
+        .results-table td { padding: 12px 15px; border-bottom: 1px solid #e2e8f0; font-size: 0.95rem; }
+        .results-table tr:hover { background-color: #f8fafc; }
+
+        .badge { padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; text-align: center; display: inline-block; }
+        .badge-prep { background-color: #fef3c7; color: #d97706; }      
+        .badge-ready { background-color: #d1fae5; color: #059669; }     
+        .badge-delivered { background-color: #e2e8f0; color: #475569; } 
+
+        .btn { padding: 10px 20px; border-radius: 6px; font-weight: 600; cursor: pointer; border: none; display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; transition: 0.2s; }
+        .btn-primary { background-color: var(--primary-dark); color: white; }
+        .btn-primary:hover { background-color: var(--primary-light); }
+        .btn-action { padding: 6px 12px; font-size: 0.85rem; background-color: var(--primary-light); color: white; }
+        .btn-action:hover { background-color: var(--primary-dark); }
+        .btn-danger { padding: 6px 12px; font-size: 0.85rem; background-color: #dc2626; color: white; }
+        .btn-danger:hover { background-color: #b91c1c; }
+
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.4); justify-content: center; align-items: center; padding: 20px; }
+        .modal-content { background-color: white; border-radius: 12px; max-width: 650px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 35px; box-shadow: 0 5px 25px rgba(0,0,0,0.2); position: relative; }
+        .close-modal { position: absolute; top: 20px; right: 25px; font-size: 1.5rem; cursor: pointer; color: #666; }
+        .modal-section-box { border: 1px solid #e2e8f0; padding: 20px; border-radius: 8px; margin-bottom: 20px; background-color: #f8fafc; }
+        .balance-highlight { font-size: 1.2rem; font-weight: bold; color: #b91c1c; }
+        .balance-ok { color: #059669 !important; }
+        .print-template { display: none; }
+    </style>
+</head>
+<body>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <img src="logo-circular.jpg" alt="HV" onerror="this.src='https://via.placeholder.com/45?text=HV'">
+            <span>Heaven Vision</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="dashboard.html"><i class="fa-solid fa-chart-line"></i><span>Inicio / Dashboard</span></a></li>
+            <li><a href="crear_receta.html"><i class="fa-solid fa-file-prescription"></i><span>Crear Receta</span></a></li>
+            <li><a href="ordenes.html"><i class="fa-solid fa-file-invoice"></i><span>Orden de Trabajo</span></a></li>
+            <li><a href="buscar_receta.html"><i class="fa-solid fa-magnifying-glass"></i><span>Buscar Receta</span></a></li>
+            <li><a href="buscar_orden.html" class="active"><i class="fa-solid fa-search-dollar"></i><span>Buscar Orden</span></a></li>
+            <li><a href="inventario.html"><i class="fa-solid fa-boxes-stacked"></i><span>Inventario</span></a></li>
+            <li><a href="inventario_cristales.html"><i class="fa-solid fa-microscope"></i><span>Inv. Cristales</span></a></li>
+            <li class="logout-link"><a href="#" onclick="cerrarSesion()"><i class="fa-solid fa-power-off"></i><span>Cerrar Sesión</span></a></li>
+        </ul>
+    </nav>
+
+    <div class="main-content">
+        <header class="top-bar">
+            <div class="toggle-btn" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></div>
+            <div class="user-info">
+                <span class="user-name">Administrador</span>
+                <div class="user-avatar">AD</div>
+            </div>
+        </header>
+
+        <main class="content-area">
+            <div style="margin-bottom: 25px;">
+                <h1 style="color: var(--primary-dark);">Historial de Órdenes de Trabajo</h1>
+                <p style="color: #666;">Consulte transacciones comerciales, modifique estados de lentes y complete saldos de caja.</p>
+            </div>
+
+            <div class="search-card">
+                <form id="searchForm" onsubmit="buscarOrdenes(event)">
+                    <div class="search-grid">
+                        <div class="form-group">
+                            <label>N° Orden Interno</label>
+                            <input type="number" id="s_order_id" class="form-control" placeholder="Ej. 1">
+                        </div>
+                        <div class="form-group">
+                            <label>RUT Paciente</label>
+                            <input type="text" id="s_rut" class="form-control" placeholder="Ej. 21.000.220-1">
+                        </div>
+                        <div class="form-group">
+                            <label>Nombre Paciente</label>
+                            <input type="text" id="s_nombre" class="form-control" placeholder="Ej. Gohan">
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">
+                                <i class="fa-solid fa-search"></i> Buscar Órdenes
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="results-card">
+                <h3 style="color: var(--primary-dark);">Registros de Venta Hallados</h3>
+                <div class="table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>N° Orden</th>
+                                <th>Fecha</th>
+                                <th>Paciente</th>
+                                <th>Total ($)</th>
+                                <th>Abono ($)</th>
+                                <th>Saldo ($)</th>
+                                <th>Estado</th>
+                                <th style="text-align: center;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <tr><td colspan="8" style="text-align: center; color: #888; padding: 20px;">Cargando los últimos registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="editOrderModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeModal()">&times;</span>
+            <h2 style="color: var(--primary-dark); margin-bottom: 20px; border-bottom: 2px solid #eee; padding-bottom: 10px;">
+                <i class="fa-solid fa-cash-register"></i> Modificar Orden N° <span id="m_order_title">0000</span>
+            </h2>
+            
+            <form id="modalEditForm" onsubmit="actualizarOrdenTrabajo(event)">
+                <input type="hidden" id="m_row_id">
+                <div class="modal-section-box" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.95rem;">
+                    <div><strong>Paciente:</strong> <span id="m_paciente_name">N/A</span></div>
+                    <div><strong>Detalle Encargo:</strong> <span id="m_details" style="font-style: italic; color:#555;">N/A</span></div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 20px;">
+                    <label><i class="fa-solid fa-microscope"></i> Estado del Lente / Proceso:</label>
+                    <select id="m_estado" class="form-control" required>
+                        <option value="En preparación">En preparación</option>
+                        <option value="Listo para retiro">Listo para retiro</option>
+                        <option value="Retirado">Retirado</option>
+                    </select>
+                </div>
+
+                <div class="modal-section-box">
+                    <h4 style="color: var(--primary-dark); margin-bottom: 15px;"><i class="fa-solid fa-dollar-sign"></i> Liquidación de Saldos</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+                        <div class="form-group">
+                            <label>Precio Total Pactado ($):</label>
+                            <input type="number" id="m_total" class="form-control" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label>Método de Pago Utilizado:</label>
+                            <select id="m_metodo" class="form-control" required>
+                                <option value="Efectivo">Efectivo</option>
+                                <option value="Tarjeta de Débito">Tarjeta de Débito</option>
+                                <option value="Tarjeta de Crédito">Tarjeta de Crédito</option>
+                                <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label>Abono Acumulado ($):</label>
+                            <input type="number" id="m_abono" class="form-control" min="0" oninput="recalcularSaldoModal()" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Saldo Pendiente ($):</label>
+                            <input type="text" id="m_saldo" class="form-control balance-highlight" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnGuardarModal"><i class="fa-solid fa-save"></i> Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+        function closeModal() { document.getElementById('editOrderModal').style.display = "none"; }
+
+        document.addEventListener('DOMContentLoaded', () => { buscarOrdenes(null); });
+
+        async function buscarOrdenes(e) {
+            if(e) e.preventDefault();
+            const idInput = document.getElementById('s_order_id').value.trim();
+            const rutInput = document.getElementById('s_rut').value.trim();
+            const nombreInput = document.getElementById('s_nombre').value.trim();
+            const tbody = document.getElementById('resultsBody');
+            
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #666; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Consultando base de datos de caja...</td></tr>`;
+
+            try {
+                let ordenes = [];
+                if (idInput) {
+                    const { data, error } = await supabaseClient.from('Orden de trabajo').select('*, Cliente(*)').eq('id_orden', parseInt(idInput));
+                    if (error) throw error;
+                    ordenes = data || [];
+                } else if (rutInput || nombreInput) {
+                    let queryClientes = supabaseClient.from('Cliente').select('id');
+                    if (rutInput) queryClientes = queryClientes.ilike('patient_rut', `%${rutInput}%`);
+                    if (nombreInput) queryClientes = queryClientes.ilike('patient_name', `%${nombreInput}%`);
+                    const { data: clientes, error: errCli } = await queryClientes;
+                    if (errCli) throw errCli;
+
+                    if (clientes && clientes.length > 0) {
+                        const idsClientes = clientes.map(c => c.id);
+                        const { data: dataOrd, error: errOrd } = await supabaseClient.from('Orden de trabajo').select('*, Cliente(*)').in('patient_id', idsClientes).order('id', { ascending: false });
+                        if (errOrd) throw errOrd;
+                        ordenes = dataOrd || [];
+                    }
+                } else {
+                    const { data, error } = await supabaseClient.from('Orden de trabajo').select('*, Cliente(*)').order('id', { ascending: false }).limit(10);
+                    if (error) throw error;
+                    ordenes = data || [];
+                }
+
+                if (ordenes.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #dc2626; padding: 20px; font-weight: 600;"><i class="fa-solid fa-triangle-exclamation"></i> No se encontraron órdenes.</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = "";
+                ordenes.forEach(ord => {
+                    const idFormateado = String(ord.id_orden || ord.id).padStart(4, '0');
+                    const nombrePaciente = ord.Cliente ? ord.Cliente.patient_name : "No asignado";
+                    
+                    let badgeClass = "badge-prep";
+                    if (ord.estado === "Listo para retiro") badgeClass = "badge-ready";
+                    if (ord.estado === "Retirado") badgeClass = "badge-delivered";
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td style="font-weight: bold; color: var(--primary-dark);">#${idFormateado}</td>
+                        <td>${ord.order_date || 'Sin fecha'}</td>
+                        <td style="font-weight: 500;">${nombrePaciente}</td>
+                        <td>$${parseInt(ord.Total).toLocaleString('es-CL')}</td>
+                        <td style="color: #059669;">$${parseInt(ord.Abono).toLocaleString('es-CL')}</td>
+                        <td style="font-weight: bold; color: ${ord.Saldo > 0 ? '#b91c1c' : '#059669'}">$${parseInt(ord.Saldo).toLocaleString('es-CL')}</td>
+                        <td><span class="badge ${badgeClass}">${ord.estado || 'En preparación'}</span></td>
+                        <td style="text-align: center; display: flex; gap: 8px; justify-content: center;">
+                            <button class="btn btn-action" onclick="abrirModalEdicion(${JSON.stringify(ord).replace(/"/g, '&quot;')})"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                            <button class="btn btn-danger" onclick="eliminarOrden(${ord.id})"><i class="fa-solid fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #dc2626; padding: 20px;">Error: ${err.message}</td></tr>`;
+            }
+        }
+
+        async function eliminarOrden(id) {
+            const confirmacion = confirm(`⚠️ ALERTA DE SEGURIDAD COMERCIAL ⚠️\n\n¿Está seguro de eliminar la Orden de Trabajo #${String(id).padStart(4, '0')}?\n\nEsta acción borrará permanentemente todo el registro contable de Supabase.`);
+            if (!confirmacion) return;
+
+            try {
+                const { error } = await supabaseClient.from('Orden de trabajo').delete().eq('id', id);
+                if (error) throw error;
+                alert("Orden de trabajo eliminada correctamente.");
+                buscarOrdenes(null);
+            } catch (err) { alert("Error: " + err.message); }
+        }
+
+        function abrirModalEdicion(orden) {
+            document.getElementById('m_row_id').value = orden.id; 
+            document.getElementById('m_order_title').innerText = String(orden.id_orden || orden.id).padStart(4, '0');
+            document.getElementById('m_paciente_name').innerText = orden.Cliente ? orden.Cliente.patient_name : 'N/A';
+            document.getElementById('m_details').innerText = orden.details || 'N/A';
+            document.getElementById('m_estado').value = orden.estado || "En preparación";
+            document.getElementById('m_total').value = orden.Total;
+            document.getElementById('m_abono').value = orden.Abono;
+            document.getElementById('m_metodo').value = orden.Metodo_pago || "Efectivo";
+            recalcularSaldoModal();
+            document.getElementById('editOrderModal').style.display = "flex";
+        }
+
+        function recalcularSaldoModal() {
+            const total = parseFloat(document.getElementById('m_total').value) || 0;
+            const abono = parseFloat(document.getElementById('m_abono').value) || 0;
+            const saldoField = document.getElementById('m_saldo');
+            const saldo = total - abono;
+            saldoField.value = saldo < 0 ? 0 : saldo;
+            if (saldo === 0 && total > 0) { saldoField.classList.add('balance-ok'); } else { saldoField.classList.remove('balance-ok'); }
+        }
+
+        async function actualizarOrdenTrabajo(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btnGuardarModal');
+            btn.disabled = true;
+            btn.innerText = "Guardando...";
+
+            const rowId = parseInt(document.getElementById('m_row_id').value);
+            const nuevoEstado = document.getElementById('m_estado').value;
+            const nuevoAbono = parseFloat(document.getElementById('m_abono').value) || 0;
+            const nuevoSaldo = parseFloat(document.getElementById('m_saldo').value) || 0;
+            const nuevoMetodo = document.getElementById('m_metodo').value;
+
+            if (nuevoEstado === "Retirado" && nuevoSaldo > 0) {
+                alert("¡Alerta de Caja Heaven Vision!\n\nNo es posible cambiar el estado a 'Retirado' si el paciente aún mantiene un saldo pendiente de $" + nuevoSaldo.toLocaleString('es-CL') + ".");
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-save"></i> Guardar Cambios`;
+                return; 
+            }
+
+            try {
+                const { error } = await supabaseClient.from('Orden de trabajo').update({ estado: nuevoEstado, Abono: nuevoAbono, Saldo: nuevoSaldo, Metodo_pago: nuevoMetodo }).eq('id', rowId);
+                if (error) throw error;
+                closeModal();
+                alert("Orden de trabajo actualizada de forma exitosa.");
+                buscarOrdenes(null);
+            } catch (err) { alert("Error: " + err.message); } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-save"></i> Guardar Cambios`;
+            }
+        }
+    </script>
+</body>
+</html>

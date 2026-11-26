@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso - Heaven Vision</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+
+    <style>
+        /* VARIABLES DE COLOR */
+        :root {
+            --primary-dark: #1b4b52;
+            --primary-light: #2d7a85;
+            --accent: #d4af37;
+            --bg-body: #f4f7f6;
+            --white: #ffffff;
+            --text-dark: #2c3e50;
+            --text-muted: #64748b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            display: flex;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- MITAD IZQUIERDA: IMAGEN Y MARCA --- */
+        .login-visual {
+            flex: 1;
+            position: relative;
+            background-color: var(--primary-dark); 
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--white);
+            text-align: center;
+            padding: 40px;
+            overflow: hidden;
+        }
+
+        /* ESTILO NUEVO PARA QUE EL VIDEO SEA UN FONDO */
+        .video-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Hace que el video recorte sus bordes para llenar todo el espacio, igual que una imagen de fondo */
+            z-index: 0;
+        }
+
+        /* Capa de color semitransparente sobre el video */
+        .login-visual::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, rgba(27, 75, 82, 0.9) 0%, rgba(15, 42, 46, 0.95) 100%);
+            z-index: 1; /* Se coloca encima del video (0) pero debajo del texto (2) */
+        }
+
+        .visual-content {
+            position: relative;
+            z-index: 2;
+            max-width: 500px;
+        }
+
+        /* Capa de color semitransparente sobre la imagen */
+        .login-visual::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, rgba(27, 75, 82, 0.9) 0%, rgba(15, 42, 46, 0.95) 100%);
+            z-index: 1;
+        }
+
+        .visual-content {
+            position: relative;
+            z-index: 2;
+            max-width: 500px;
+        }
+
+        .visual-content img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: white;
+            padding: 5px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .visual-content h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+
+        .visual-content p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        /* --- MITAD DERECHA: FORMULARIO --- */
+        .login-panel {
+            width: 100%;
+            max-width: 500px;
+            background-color: var(--white);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 50px 60px;
+            box-shadow: -10px 0 30px rgba(0,0,0,0.05);
+            z-index: 5;
+        }
+
+        .login-panel-header {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .login-panel-header img {
+            max-width: 240px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+
+        .login-panel-header h2 {
+            color: var(--text-dark);
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .login-panel-header p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            margin-top: 5px;
+        }
+
+        /* Inputs con Iconos */
+        .form-group {
+            margin-bottom: 22px;
+            position: relative;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary-dark);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-icon-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-icon-wrapper i {
+            position: absolute;
+            left: 15px;
+            color: #94a3b8;
+            font-size: 1.1rem;
+            transition: color 0.3s;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 15px 14px 45px; /* Espacio para el icono */
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s;
+            background-color: #f8fafc;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary-light);
+            background-color: var(--white);
+            box-shadow: 0 0 0 4px rgba(45, 122, 133, 0.1);
+        }
+
+        .form-control:focus + i, 
+        .input-icon-wrapper:focus-within i {
+            color: var(--primary-light);
+        }
+
+        /* Botón de Login */
+        .btn-login {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-light) 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.05rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(27, 75, 82, 0.2);
+        }
+
+        .btn-login:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        /* Mensaje de Error */
+        .error-message {
+            color: #b91c1c;
+            background-color: #fef2f2;
+            padding: 12px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+            display: none;
+            border: 1px solid #fecaca;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Pie de página pequeño */
+        .login-footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        /* DISEÑO RESPONSIVO (MÓVILES) */
+        @media (max-width: 900px) {
+            .login-visual {
+                display: none; /* Oculta la imagen en pantallas pequeñas */
+            }
+            .login-panel {
+                max-width: 100%;
+                padding: 40px 30px;
+            }
+            body {
+                background: linear-gradient(135deg, var(--primary-dark) 0%, #0f2a2e 100%);
+                align-items: center;
+                padding: 20px;
+            }
+            .login-panel {
+                border-radius: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-visual">
+        <!-- VIDEO DE FONDO -->
+        <video class="video-bg" autoplay loop muted playsinline>
+            <!-- RECOMENDACIÓN: Si el video no carga, prueba quitarle los espacios al nombre del archivo -->
+            <source src="Video Inicio Haven Vision.mp4" type="video/mp4">
+        </video>
+        <div class="visual-content">
+            <img src="logo-circular.jpg" alt="HV Icon" onerror="this.style.display='none'">
+            <h1>Visión Perfecta</h1>
+            <p>Sistema integral de gestión clínica y administrativa para ópticas. Administre sus recetas, pacientes y órdenes de trabajo en un solo lugar seguro.</p>
+        </div>
+    </div>
+
+    <div class="login-panel">
+        
+        <div class="login-panel-header">
+            <img src="Logo_Heaven_Vision.png" alt="Heaven Vision" onerror="this.src='logo-grande.png'">
+            <h2>Bienvenido de vuelta</h2>
+            <p>Ingrese sus credenciales administrativas</p>
+        </div>
+
+        <div id="error-alert" class="error-message" style="display: none;">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span id="error-text"></span>
+        </div>
+        
+        <form id="loginForm" onsubmit="ejecutarLoginSeguro(event)">
+            
+            <div class="form-group">
+                <label>Correo Electrónico</label>
+                <div class="input-icon-wrapper">
+                    <i class="fa-solid fa-envelope"></i>
+                    <input type="email" id="txt_email" class="form-control" placeholder="ejemplo@heavenvision.com" required>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Contraseña</label>
+                <div class="input-icon-wrapper">
+                    <i class="fa-solid fa-lock"></i>
+                    <input type="password" id="txt_password" class="form-control" placeholder="••••••••" required>
+                </div>
+            </div>
+            
+            <button type="submit" id="btn_submit" class="btn-login">
+                Acceder al Sistema <i class="fa-solid fa-arrow-right-to-bracket"></i>
+            </button>
+        </form>
+
+        <div class="login-footer">
+            &copy; 2026 Heaven Vision. Todos los derechos reservados.
+        </div>
+
+    </div>
+
+    <script>
+        async function ejecutarLoginSeguro(e) {
+            e.preventDefault(); 
+
+            const email = document.getElementById('txt_email').value;
+            const password = document.getElementById('txt_password').value;
+            const btnSubmit = document.getElementById('btn_submit');
+            const errorAlert = document.getElementById('error-alert');
+            const errorText = document.getElementById('error-text');
+
+            // Deshabilitar botón
+            btnSubmit.disabled = true;
+            btnSubmit.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Verificando...`;
+            errorAlert.style.display = "none";
+
+            try {
+                // LLAMADA A SUPABASE
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+                if (error) {
+                    throw error;
+                }
+
+                // Éxito -> Ir al dashboard
+                btnSubmit.innerHTML = `<i class="fa-solid fa-check"></i> Acceso Correcto`;
+                btnSubmit.style.background = "#059669"; // Verde de éxito
+                
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 500);
+
+            } catch (err) {
+                // Mostrar error
+                errorText.innerText = traducirErrorAuth(err.message);
+                errorAlert.style.display = "flex";
+                
+                // Restaurar botón
+                btnSubmit.disabled = false;
+                btnSubmit.innerHTML = `Acceder al Sistema <i class="fa-solid fa-arrow-right-to-bracket"></i>`;
+            }
+        }
+
+        // Traductor de errores
+        function traducirErrorAuth(mensaje) {
+            if (mensaje.includes("Invalid login credentials")) {
+                return "El correo o la contraseña son incorrectos.";
+            }
+            if (mensaje.includes("Email not confirmed")) {
+                return "El correo electrónico aún no ha sido confirmado.";
+            }
+            return mensaje;
+        }
+    </script>
+</body>
+</html>
